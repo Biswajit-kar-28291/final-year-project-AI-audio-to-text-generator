@@ -76,7 +76,7 @@ function App() {
           />
 
           <button type="submit" disabled={loading}>
-            {loading ? "Processing..." : "Generate Notes"}
+            {loading ? "Downloading Audio..." : "Generate Notes"}
           </button>
         </form>
 
@@ -92,6 +92,14 @@ function App() {
 
             <p>
               <strong>Video ID:</strong> {responseData.video_id}
+            </p>
+
+            <p>
+              <strong>Audio File:</strong> {responseData.audio_file}
+            </p>
+
+            <p>
+              <strong>Download Status:</strong> {responseData.download_status}
             </p>
 
             <div className="section">

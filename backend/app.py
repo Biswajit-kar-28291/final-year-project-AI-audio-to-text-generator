@@ -1,21 +1,18 @@
-import re
+import os
 from urllib.parse import urlparse, parse_qs
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+import yt_dlp
 
 app = Flask(__name__)
 CORS(app)
 
+DOWNLOAD_FOLDER = "downloads"
+os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
+
 
 def is_valid_youtube_url(url):
-    """
-    Checks if the URL belongs to YouTube and contains a usable video ID.
-    Supports:
-    - https://www.youtube.com/watch?v=VIDEO_ID
-    - https://youtu.be/VIDEO_ID
-    - https://youtube.com/shorts/VIDEO_ID
-    """
     try:
         parsed = urlparse(url)
 
@@ -30,18 +27,15 @@ def is_valid_youtube_url(url):
         if parsed.netloc not in valid_domains:
             return False
 
-        # youtu.be/<id>
         if parsed.netloc in {"youtu.be", "www.youtu.be"}:
             video_id = parsed.path.strip("/")
             return bool(video_id)
 
-        # youtube.com/watch?v=<id>
         if parsed.path == "/watch":
             query_params = parse_qs(parsed.query)
             video_id = query_params.get("v", [""])[0]
             return bool(video_id)
 
-        # youtube.com/shorts/<id>
         if parsed.path.startswith("/shorts/"):
             video_id = parsed.path.split("/shorts/")[-1].strip("/")
             return bool(video_id)
@@ -53,9 +47,6 @@ def is_valid_youtube_url(url):
 
 
 def extract_video_id(url):
-    """
-    Extract the YouTube video ID from supported URL formats.
-    """
     try:
         parsed = urlparse(url)
 
@@ -70,8 +61,33 @@ def extract_video_id(url):
             return parsed.path.split("/shorts/")[-1].strip("/")
 
         return ""
+
     except Exception:
         return ""
+
+
+def download_audio(youtube_link, video_id):
+    output_template = os.path.join(DOWNLOAD_FOLDER, f"{video_id}.%(ext)s")
+
+    ydl_opts = {
+        "format": "bestaudio/best",
+        "outtmpl": output_template,
+        "noplaylist": True,
+        "quiet": True,
+        "postprocessors": [
+            {
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "192",
+            }
+        ],
+    }
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([youtube_link])
+
+    final_file = os.path.join(DOWNLOAD_FOLDER, f"{video_id}.mp3")
+    return final_file
 
 
 @app.route("/", methods=["GET"])
@@ -115,27 +131,28 @@ def process_video():
                 "error": "Could not extract video ID from the link"
             }), 400
 
-        # Day 2 placeholder output
-        # Later we will replace this with real audio extraction + transcription + summary
-        sample_transcript = (
-            "This is a sample transcript for the selected YouTube video. "
-            "In the next step, we will replace this with real transcript generation."
-        )
+        audio_file_path = download_audio(youtube_link, video_id)
 
-        sample_notes = [
-            "Validated the YouTube link successfully.",
-            "Extracted the video ID from the link.",
-            "Prepared backend structure for transcript and notes generation.",
-            "Next step will add real video/audio processing."
-        ]
+        if not os.path.exists(audio_file_path):
+            return jsonify({
+                "status": "error",
+                "error": "Audio download failed"
+            }), 500
 
         return jsonify({
             "status": "success",
-            "message": "YouTube link processed successfully",
+            "message": "Audio downloaded successfully",
             "youtube_link": youtube_link,
             "video_id": video_id,
-            "transcript": sample_transcript,
-            "notes": sample_notes
+            "audio_file": audio_file_path,
+            "download_status": "success",
+            "transcript": "Audio downloaded. Real transcription will be added in Day 4.",
+            "notes": [
+                "Validated the YouTube link successfully.",
+                "Extracted the video ID from the link.",
+                "Downloaded and converted the audio to MP3.",
+                "Next step will generate transcript from audio."
+            ]
         }), 200
 
     except Exception as e:
