@@ -11,14 +11,14 @@ body {
 .app {
   min-height: 100vh;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   padding: 30px;
 }
 
 .card {
   width: 100%;
-  max-width: 750px;
+  max-width: 850px;
   background: #ffffff;
   border-radius: 14px;
   padding: 30px;
@@ -93,7 +93,7 @@ button:disabled {
 }
 
 .section {
-  margin-top: 20px;
+  margin-top: 24px;
 }
 
 .section h3 {
@@ -107,4 +107,19 @@ ul {
 
 li {
   margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.keyword-tag {
+  background: #dbeafe;
+  color: #1d4ed8;
+  padding: 8px 12px;
+  border-radius: 20px;
+  font-size: 14px;
 }

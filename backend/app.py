@@ -1,4 +1,6 @@
 import os
+import re
+from collections import Counter
 from urllib.parse import urlparse, parse_qs
 
 from flask import Flask, request, jsonify
@@ -12,9 +14,21 @@ CORS(app)
 DOWNLOAD_FOLDER = "downloads"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
-# Load Whisper model once when backend starts
-# small = better quality than tiny, but slower
+# Load Whisper model once
 model = whisper.load_model("small")
+
+STOP_WORDS = {
+    "a", "an", "the", "and", "or", "but", "if", "then", "than", "so", "because",
+    "as", "of", "at", "by", "for", "with", "about", "into", "through", "during",
+    "before", "after", "above", "below", "to", "from", "up", "down", "in", "out",
+    "on", "off", "over", "under", "again", "further", "once", "here", "there",
+    "when", "where", "why", "how", "all", "any", "both", "each", "few", "more",
+    "most", "other", "some", "such", "no", "nor", "not", "only", "own", "same",
+    "very", "can", "will", "just", "do", "does", "did", "is", "am", "are", "was",
+    "were", "be", "been", "being", "have", "has", "had", "having", "this", "that",
+    "these", "those", "he", "she", "it", "they", "them", "his", "her", "their",
+    "you", "your", "yours", "we", "our", "ours", "i", "me", "my", "mine"
+}
 
 
 def is_valid_youtube_url(url):
@@ -33,20 +47,16 @@ def is_valid_youtube_url(url):
             return False
 
         if parsed.netloc in {"youtu.be", "www.youtu.be"}:
-            video_id = parsed.path.strip("/")
-            return bool(video_id)
+            return bool(parsed.path.strip("/"))
 
         if parsed.path == "/watch":
             query_params = parse_qs(parsed.query)
-            video_id = query_params.get("v", [""])[0]
-            return bool(video_id)
+            return bool(query_params.get("v", [""])[0])
 
         if parsed.path.startswith("/shorts/"):
-            video_id = parsed.path.split("/shorts/")[-1].strip("/")
-            return bool(video_id)
+            return bool(parsed.path.split("/shorts/")[-1].strip("/"))
 
         return False
-
     except Exception:
         return False
 
@@ -66,7 +76,6 @@ def extract_video_id(url):
             return parsed.path.split("/shorts/")[-1].strip("/")
 
         return ""
-
     except Exception:
         return ""
 
@@ -91,13 +100,68 @@ def download_audio(youtube_link, video_id):
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([youtube_link])
 
-    final_file = os.path.join(DOWNLOAD_FOLDER, f"{video_id}.mp3")
-    return final_file
+    return os.path.join(DOWNLOAD_FOLDER, f"{video_id}.mp3")
 
 
 def transcribe_audio(audio_path):
     result = model.transcribe(audio_path)
     return result["text"].strip()
+
+
+def split_sentences(text):
+    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+    sentences = [s.strip() for s in sentences if s.strip()]
+    return sentences
+
+
+def extract_keywords(text, top_n=8):
+    words = re.findall(r"\b[a-zA-Z]{3,}\b", text.lower())
+    filtered_words = [word for word in words if word not in STOP_WORDS]
+    word_counts = Counter(filtered_words)
+    return [word for word, _ in word_counts.most_common(top_n)]
+
+
+def score_sentences(sentences, keywords):
+    scored = []
+    keyword_set = set(keywords)
+
+    for sentence in sentences:
+        words = re.findall(r"\b[a-zA-Z]{3,}\b", sentence.lower())
+        score = sum(1 for word in words if word in keyword_set)
+        scored.append((sentence, score))
+
+    scored.sort(key=lambda x: x[1], reverse=True)
+    return scored
+
+
+def generate_summary_and_notes(transcript):
+    sentences = split_sentences(transcript)
+
+    if not sentences:
+        return {
+            "summary": "No summary could be generated.",
+            "important_points": [],
+            "keywords": []
+        }
+
+    keywords = extract_keywords(transcript, top_n=8)
+    scored_sentences = score_sentences(sentences, keywords)
+
+    top_summary_sentences = [sentence for sentence, score in scored_sentences[:3] if score > 0]
+    if not top_summary_sentences:
+        top_summary_sentences = sentences[:2]
+
+    summary = " ".join(top_summary_sentences)
+
+    important_points = [sentence for sentence, score in scored_sentences[:5] if score > 0]
+    if not important_points:
+        important_points = sentences[:5]
+
+    return {
+        "summary": summary,
+        "important_points": important_points,
+        "keywords": keywords
+    }
 
 
 @app.route("/", methods=["GET"])
@@ -134,7 +198,6 @@ def process_video():
             }), 400
 
         video_id = extract_video_id(youtube_link)
-
         if not video_id:
             return jsonify({
                 "status": "error",
@@ -142,7 +205,6 @@ def process_video():
             }), 400
 
         audio_file_path = download_audio(youtube_link, video_id)
-
         if not os.path.exists(audio_file_path):
             return jsonify({
                 "status": "error",
@@ -150,25 +212,24 @@ def process_video():
             }), 500
 
         transcript = transcribe_audio(audio_file_path)
-
         if not transcript:
             return jsonify({
                 "status": "error",
                 "error": "Transcription failed"
             }), 500
 
+        notes_data = generate_summary_and_notes(transcript)
+
         return jsonify({
             "status": "success",
-            "message": "Audio downloaded and transcribed successfully",
+            "message": "Audio downloaded, transcribed, and notes generated successfully",
             "youtube_link": youtube_link,
             "video_id": video_id,
             "audio_file": audio_file_path,
             "transcript": transcript,
-            "notes": [
-                "Audio downloaded successfully.",
-                "Real transcript generated using Whisper.",
-                "Next step will convert transcript into notes and summary."
-            ]
+            "summary": notes_data["summary"],
+            "important_points": notes_data["important_points"],
+            "keywords": notes_data["keywords"]
         }), 200
 
     except Exception as e:

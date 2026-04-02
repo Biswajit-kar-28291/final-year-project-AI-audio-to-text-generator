@@ -76,7 +76,7 @@ function App() {
           />
 
           <button type="submit" disabled={loading}>
-            {loading ? "Downloading + Transcribing..." : "Generate Notes"}
+            {loading ? "Processing..." : "Generate Notes"}
           </button>
         </form>
 
@@ -99,17 +99,33 @@ function App() {
             </p>
 
             <div className="section">
-              <h3>Transcript</h3>
-              <p>{responseData.transcript}</p>
+              <h3>Summary</h3>
+              <p>{responseData.summary}</p>
             </div>
 
             <div className="section">
               <h3>Important Notes</h3>
               <ul>
-                {responseData.notes.map((note, index) => (
-                  <li key={index}>{note}</li>
+                {responseData.important_points.map((point, index) => (
+                  <li key={index}>{point}</li>
                 ))}
               </ul>
+            </div>
+
+            <div className="section">
+              <h3>Keywords</h3>
+              <div className="keywords">
+                {responseData.keywords.map((word, index) => (
+                  <span className="keyword-tag" key={index}>
+                    {word}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="section">
+              <h3>Transcript</h3>
+              <p>{responseData.transcript}</p>
             </div>
           </div>
         )}
