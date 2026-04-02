@@ -4,12 +4,17 @@ from urllib.parse import urlparse, parse_qs
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import yt_dlp
+import whisper
 
 app = Flask(__name__)
 CORS(app)
 
 DOWNLOAD_FOLDER = "downloads"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
+
+# Load Whisper model once when backend starts
+# small = better quality than tiny, but slower
+model = whisper.load_model("small")
 
 
 def is_valid_youtube_url(url):
@@ -73,7 +78,7 @@ def download_audio(youtube_link, video_id):
         "format": "bestaudio/best",
         "outtmpl": output_template,
         "noplaylist": True,
-        "quiet": True,
+        "quiet": False,
         "postprocessors": [
             {
                 "key": "FFmpegExtractAudio",
@@ -88,6 +93,11 @@ def download_audio(youtube_link, video_id):
 
     final_file = os.path.join(DOWNLOAD_FOLDER, f"{video_id}.mp3")
     return final_file
+
+
+def transcribe_audio(audio_path):
+    result = model.transcribe(audio_path)
+    return result["text"].strip()
 
 
 @app.route("/", methods=["GET"])
@@ -139,19 +149,25 @@ def process_video():
                 "error": "Audio download failed"
             }), 500
 
+        transcript = transcribe_audio(audio_file_path)
+
+        if not transcript:
+            return jsonify({
+                "status": "error",
+                "error": "Transcription failed"
+            }), 500
+
         return jsonify({
             "status": "success",
-            "message": "Audio downloaded successfully",
+            "message": "Audio downloaded and transcribed successfully",
             "youtube_link": youtube_link,
             "video_id": video_id,
             "audio_file": audio_file_path,
-            "download_status": "success",
-            "transcript": "Audio downloaded. Real transcription will be added in Day 4.",
+            "transcript": transcript,
             "notes": [
-                "Validated the YouTube link successfully.",
-                "Extracted the video ID from the link.",
-                "Downloaded and converted the audio to MP3.",
-                "Next step will generate transcript from audio."
+                "Audio downloaded successfully.",
+                "Real transcript generated using Whisper.",
+                "Next step will convert transcript into notes and summary."
             ]
         }), 200
 
