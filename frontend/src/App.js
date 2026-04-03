@@ -6,6 +6,7 @@ function App() {
   const [responseData, setResponseData] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [copyMessage, setCopyMessage] = useState("");
 
   const isValidYouTubeLink = (url) => {
     const pattern =
@@ -18,6 +19,7 @@ function App() {
 
     setError("");
     setResponseData(null);
+    setCopyMessage("");
 
     const cleanLink = youtubeLink.trim();
 
@@ -59,6 +61,54 @@ function App() {
     }
   };
 
+  const handleCopyTranscript = async () => {
+    if (!responseData?.transcript) return;
+
+    try {
+      await navigator.clipboard.writeText(responseData.transcript);
+      setCopyMessage("Transcript copied successfully.");
+      setTimeout(() => setCopyMessage(""), 2000);
+    } catch (err) {
+      setCopyMessage("Copy failed.");
+      setTimeout(() => setCopyMessage(""), 2000);
+    }
+  };
+
+  const handleDownloadNotes = () => {
+    if (!responseData) return;
+
+    const fileContent = `
+YouTube Notes Generator
+
+Video Link: ${responseData.youtube_link}
+Video ID: ${responseData.video_id}
+Audio File: ${responseData.audio_file}
+
+Summary:
+${responseData.summary}
+
+Important Notes:
+${responseData.important_points.map((point) => `- ${point}`).join("\n")}
+
+Keywords:
+${responseData.keywords.join(", ")}
+
+Transcript:
+${responseData.transcript}
+    `.trim();
+
+    const blob = new Blob([fileContent], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `video_notes_${responseData.video_id}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="app">
       <div className="card">
@@ -76,9 +126,15 @@ function App() {
           />
 
           <button type="submit" disabled={loading}>
-            {loading ? "Processing..." : "Generate Notes"}
+            {loading ? "Processing Video..." : "Generate Notes"}
           </button>
         </form>
+
+        {loading && (
+          <div className="loading-box">
+            Downloading audio, generating transcript, and preparing notes...
+          </div>
+        )}
 
         {error && <p className="error">{error}</p>}
 
@@ -86,35 +142,64 @@ function App() {
           <div className="result">
             <h2>{responseData.message}</h2>
 
-            <p>
-              <strong>Video Link:</strong> {responseData.youtube_link}
-            </p>
+            <div className="info-grid">
+              <div className="info-item">
+                <span className="label">Video Link</span>
+                <span className="value break-text">{responseData.youtube_link}</span>
+              </div>
 
-            <p>
-              <strong>Video ID:</strong> {responseData.video_id}
-            </p>
+              <div className="info-item">
+                <span className="label">Video ID</span>
+                <span className="value">{responseData.video_id}</span>
+              </div>
 
-            <p>
-              <strong>Audio File:</strong> {responseData.audio_file}
-            </p>
+              <div className="info-item">
+                <span className="label">Audio File</span>
+                <span className="value break-text">{responseData.audio_file}</span>
+              </div>
+            </div>
+
+            <div className="action-buttons">
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={handleDownloadNotes}
+              >
+                Download Notes
+              </button>
+
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={handleCopyTranscript}
+              >
+                Copy Transcript
+              </button>
+            </div>
+
+            {copyMessage && <p className="copy-message">{copyMessage}</p>}
 
             <div className="section">
               <h3>Summary</h3>
-              <p>{responseData.summary}</p>
+              <div className="section-box">
+                <p>{responseData.summary}</p>
+              </div>
             </div>
 
             <div className="section">
               <h3>Important Notes</h3>
-              <ul>
-                {responseData.important_points.map((point, index) => (
-                  <li key={index}>{point}</li>
-                ))}
-              </ul>
+              <div className="section-box">
+                <ul>
+                  {responseData.important_points.map((point, index) => (
+                    <li key={index}>{point}</li>
+                  ))}
+                </ul>
+              </div>
             </div>
 
             <div className="section">
               <h3>Keywords</h3>
-              <div className="keywords">
+              <div className="section-box keywords">
                 {responseData.keywords.map((word, index) => (
                   <span className="keyword-tag" key={index}>
                     {word}
@@ -125,7 +210,9 @@ function App() {
 
             <div className="section">
               <h3>Transcript</h3>
-              <p>{responseData.transcript}</p>
+              <div className="section-box transcript-box">
+                <p>{responseData.transcript}</p>
+              </div>
             </div>
           </div>
         )}
