@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import "./App.css";
+import jsPDF from "jspdf";
 
 function App() {
   const [youtubeLink, setYoutubeLink] = useState("");
@@ -74,7 +75,7 @@ function App() {
     }
   };
 
-  const handleDownloadNotes = () => {
+  const handleDownloadTXT = () => {
     if (!responseData) return;
 
     const fileContent = `
@@ -107,6 +108,117 @@ ${responseData.transcript}
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const addWrappedText = (doc, text, x, y, maxWidth, lineHeight) => {
+    const lines = doc.splitTextToSize(text, maxWidth);
+    doc.text(lines, x, y);
+    return y + lines.length * lineHeight;
+  };
+
+  const handleDownloadPDF = () => {
+    if (!responseData) return;
+
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 15;
+    const maxWidth = pageWidth - margin * 2;
+    const lineHeight = 7;
+    let y = 20;
+
+    const checkPageBreak = (neededHeight = 10) => {
+      if (y + neededHeight > pageHeight - 15) {
+        doc.addPage();
+        y = 20;
+      }
+    };
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.text("YouTube Notes Generator", margin, y);
+    y += 12;
+
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "normal");
+
+    checkPageBreak();
+    y = addWrappedText(doc, `Video Link: ${responseData.youtube_link}`, margin, y, maxWidth, lineHeight);
+    y += 2;
+
+    checkPageBreak();
+    y = addWrappedText(doc, `Video ID: ${responseData.video_id}`, margin, y, maxWidth, lineHeight);
+    y += 2;
+
+    checkPageBreak();
+    y = addWrappedText(doc, `Audio File: ${responseData.audio_file}`, margin, y, maxWidth, lineHeight);
+    y += 8;
+
+    checkPageBreak();
+    doc.setFont("helvetica", "bold");
+    doc.text("Summary", margin, y);
+    y += 8;
+
+    doc.setFont("helvetica", "normal");
+    y = addWrappedText(doc, responseData.summary || "No summary available.", margin, y, maxWidth, lineHeight);
+    y += 8;
+
+    checkPageBreak();
+    doc.setFont("helvetica", "bold");
+    doc.text("Important Notes", margin, y);
+    y += 8;
+
+    doc.setFont("helvetica", "normal");
+    if (responseData.important_points?.length) {
+      responseData.important_points.forEach((point) => {
+        checkPageBreak(20);
+        y = addWrappedText(doc, `• ${point}`, margin, y, maxWidth, lineHeight);
+        y += 2;
+      });
+    } else {
+      y = addWrappedText(doc, "No important notes available.", margin, y, maxWidth, lineHeight);
+      y += 4;
+    }
+
+    y += 6;
+    checkPageBreak();
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Keywords", margin, y);
+    y += 8;
+
+    doc.setFont("helvetica", "normal");
+    y = addWrappedText(
+      doc,
+      responseData.keywords?.length
+        ? responseData.keywords.join(", ")
+        : "No keywords available.",
+      margin,
+      y,
+      maxWidth,
+      lineHeight
+    );
+
+    y += 8;
+    checkPageBreak();
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Transcript", margin, y);
+    y += 8;
+
+    doc.setFont("helvetica", "normal");
+    const transcriptLines = doc.splitTextToSize(
+      responseData.transcript || "No transcript available.",
+      maxWidth
+    );
+
+    transcriptLines.forEach((line) => {
+      checkPageBreak(10);
+      doc.text(line, margin, y);
+      y += lineHeight;
+    });
+
+    doc.save(`video_notes_${responseData.video_id}.pdf`);
   };
 
   return (
@@ -163,9 +275,17 @@ ${responseData.transcript}
               <button
                 type="button"
                 className="secondary-btn"
-                onClick={handleDownloadNotes}
+                onClick={handleDownloadTXT}
               >
-                Download Notes
+                Download Notes TXT
+              </button>
+
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={handleDownloadPDF}
+              >
+                Download Notes PDF
               </button>
 
               <button
