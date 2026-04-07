@@ -18,7 +18,7 @@ body {
 
 .card {
   width: 100%;
-  max-width: 950px;
+  max-width: 1000px;
   background: #ffffff;
   border-radius: 16px;
   padding: 30px;
@@ -29,7 +29,7 @@ h1 {
   margin: 0;
   text-align: center;
   color: #1f2937;
-  font-size: 48px;
+  font-size: 42px;
 }
 
 .subtitle {
@@ -38,6 +38,7 @@ h1 {
   margin-top: 10px;
   margin-bottom: 28px;
   font-size: 18px;
+  line-height: 1.5;
 }
 
 form {
@@ -93,6 +94,10 @@ button:disabled {
   border-radius: 10px;
   background: #fee2e2;
   color: #b91c1c;
+}
+
+.small-error {
+  margin-top: 12px;
 }
 
 .result {
@@ -201,6 +206,34 @@ li {
   font-weight: 600;
 }
 
+.qa-item {
+  padding: 12px 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.qa-item:last-child {
+  border-bottom: none;
+}
+
+.qa-item p {
+  margin: 6px 0;
+  line-height: 1.6;
+}
+
+.ask-btn {
+  margin-top: 14px;
+  width: 100%;
+}
+
+.answer-box {
+  margin-top: 16px;
+  padding: 14px;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #1e3a8a;
+  line-height: 1.8;
+}
+
 .transcript-box {
   max-height: 320px;
   overflow-y: auto;
@@ -218,7 +251,7 @@ li {
   }
 
   h1 {
-    font-size: 34px;
+    font-size: 32px;
   }
 
   .subtitle {

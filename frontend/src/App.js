@@ -9,6 +9,13 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [copyMessage, setCopyMessage] = useState("");
 
+  const [question, setQuestion] = useState("");
+  const [answer, setAnswer] = useState("");
+  const [answerSource, setAnswerSource] = useState("");
+  const [answerInTranscript, setAnswerInTranscript] = useState(null);
+  const [askLoading, setAskLoading] = useState(false);
+  const [askError, setAskError] = useState("");
+
   const isValidYouTubeLink = (url) => {
     const pattern =
       /^(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/).+/;
@@ -21,6 +28,11 @@ function App() {
     setError("");
     setResponseData(null);
     setCopyMessage("");
+    setQuestion("");
+    setAnswer("");
+    setAnswerSource("");
+    setAnswerInTranscript(null);
+    setAskError("");
 
     const cleanLink = youtubeLink.trim();
 
@@ -78,21 +90,32 @@ function App() {
   const handleDownloadTXT = () => {
     if (!responseData) return;
 
+    const autoQaText = (responseData.auto_qa || [])
+      .map(
+        (item, index) =>
+          `Q${index + 1}: ${item.question}\nA${index + 1}: ${item.answer}`
+      )
+      .join("\n\n");
+
     const fileContent = `
 YouTube Notes Generator
 
 Video Link: ${responseData.youtube_link}
 Video ID: ${responseData.video_id}
 Audio File: ${responseData.audio_file}
+Mode: ${responseData.ai_mode}
 
 Summary:
 ${responseData.summary}
 
 Important Notes:
-${responseData.important_points.map((point) => `- ${point}`).join("\n")}
+${(responseData.important_points || []).map((point) => `- ${point}`).join("\n")}
 
 Keywords:
-${responseData.keywords.join(", ")}
+${(responseData.keywords || []).join(", ")}
+
+Automatic Q&A:
+${autoQaText}
 
 Transcript:
 ${responseData.transcript}
@@ -142,43 +165,72 @@ ${responseData.transcript}
     doc.setFontSize(11);
     doc.setFont("helvetica", "normal");
 
-    checkPageBreak();
-    y = addWrappedText(doc, `Video Link: ${responseData.youtube_link}`, margin, y, maxWidth, lineHeight);
+    y = addWrappedText(
+      doc,
+      `Video Link: ${responseData.youtube_link}`,
+      margin,
+      y,
+      maxWidth,
+      lineHeight
+    );
     y += 2;
 
-    checkPageBreak();
-    y = addWrappedText(doc, `Video ID: ${responseData.video_id}`, margin, y, maxWidth, lineHeight);
+    y = addWrappedText(
+      doc,
+      `Video ID: ${responseData.video_id}`,
+      margin,
+      y,
+      maxWidth,
+      lineHeight
+    );
     y += 2;
 
-    checkPageBreak();
-    y = addWrappedText(doc, `Audio File: ${responseData.audio_file}`, margin, y, maxWidth, lineHeight);
+    y = addWrappedText(
+      doc,
+      `Audio File: ${responseData.audio_file}`,
+      margin,
+      y,
+      maxWidth,
+      lineHeight
+    );
+    y += 2;
+
+    y = addWrappedText(
+      doc,
+      `Mode: ${responseData.ai_mode}`,
+      margin,
+      y,
+      maxWidth,
+      lineHeight
+    );
     y += 8;
 
     checkPageBreak();
     doc.setFont("helvetica", "bold");
     doc.text("Summary", margin, y);
     y += 8;
-
     doc.setFont("helvetica", "normal");
-    y = addWrappedText(doc, responseData.summary || "No summary available.", margin, y, maxWidth, lineHeight);
+    y = addWrappedText(
+      doc,
+      responseData.summary || "No summary available.",
+      margin,
+      y,
+      maxWidth,
+      lineHeight
+    );
     y += 8;
 
     checkPageBreak();
     doc.setFont("helvetica", "bold");
     doc.text("Important Notes", margin, y);
     y += 8;
-
     doc.setFont("helvetica", "normal");
-    if (responseData.important_points?.length) {
-      responseData.important_points.forEach((point) => {
-        checkPageBreak(20);
-        y = addWrappedText(doc, `• ${point}`, margin, y, maxWidth, lineHeight);
-        y += 2;
-      });
-    } else {
-      y = addWrappedText(doc, "No important notes available.", margin, y, maxWidth, lineHeight);
-      y += 4;
-    }
+
+    (responseData.important_points || []).forEach((point) => {
+      checkPageBreak(20);
+      y = addWrappedText(doc, `• ${point}`, margin, y, maxWidth, lineHeight);
+      y += 2;
+    });
 
     y += 6;
     checkPageBreak();
@@ -186,27 +238,53 @@ ${responseData.transcript}
     doc.setFont("helvetica", "bold");
     doc.text("Keywords", margin, y);
     y += 8;
-
     doc.setFont("helvetica", "normal");
     y = addWrappedText(
       doc,
-      responseData.keywords?.length
-        ? responseData.keywords.join(", ")
-        : "No keywords available.",
+      (responseData.keywords || []).join(", "),
       margin,
       y,
       maxWidth,
       lineHeight
     );
-
     y += 8;
+
+    checkPageBreak();
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Automatic Q&A", margin, y);
+    y += 8;
+    doc.setFont("helvetica", "normal");
+
+    (responseData.auto_qa || []).forEach((item, index) => {
+      checkPageBreak(30);
+      y = addWrappedText(
+        doc,
+        `Q${index + 1}: ${item.question}`,
+        margin,
+        y,
+        maxWidth,
+        lineHeight
+      );
+      y += 2;
+      y = addWrappedText(
+        doc,
+        `A${index + 1}: ${item.answer}`,
+        margin,
+        y,
+        maxWidth,
+        lineHeight
+      );
+      y += 6;
+    });
+
     checkPageBreak();
 
     doc.setFont("helvetica", "bold");
     doc.text("Transcript", margin, y);
     y += 8;
-
     doc.setFont("helvetica", "normal");
+
     const transcriptLines = doc.splitTextToSize(
       responseData.transcript || "No transcript available.",
       maxWidth
@@ -221,12 +299,60 @@ ${responseData.transcript}
     doc.save(`video_notes_${responseData.video_id}.pdf`);
   };
 
+  const handleAsk = async () => {
+    setAskError("");
+    setAnswer("");
+    setAnswerSource("");
+    setAnswerInTranscript(null);
+
+    if (!question.trim()) {
+      setAskError("Please enter a question.");
+      return;
+    }
+
+    if (!responseData?.transcript) {
+      setAskError("Process a video first.");
+      return;
+    }
+
+    try {
+      setAskLoading(true);
+
+      const response = await fetch("http://127.0.0.1:5000/api/ask", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          transcript: responseData.transcript,
+          question: question.trim(),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setAskError(data.error || "Failed to get answer.");
+        return;
+      }
+
+      setAnswer(data.answer || "");
+      setAnswerSource(data.source || "");
+      setAnswerInTranscript(data.in_transcript);
+    } catch (err) {
+      setAskError("Question answering failed.");
+    } finally {
+      setAskLoading(false);
+    }
+  };
+
   return (
     <div className="app">
       <div className="card">
         <h1>YouTube Notes Generator</h1>
         <p className="subtitle">
-          Paste a YouTube video link and generate notes
+          Paste a YouTube video link and generate transcript, AI notes, keywords,
+          PDF/TXT export, and Q&amp;A
         </p>
 
         <form onSubmit={handleSubmit}>
@@ -244,7 +370,7 @@ ${responseData.transcript}
 
         {loading && (
           <div className="loading-box">
-            Downloading audio, generating transcript, and preparing notes...
+            Downloading audio, transcribing video, and generating AI notes...
           </div>
         )}
 
@@ -257,7 +383,9 @@ ${responseData.transcript}
             <div className="info-grid">
               <div className="info-item">
                 <span className="label">Video Link</span>
-                <span className="value break-text">{responseData.youtube_link}</span>
+                <span className="value break-text">
+                  {responseData.youtube_link}
+                </span>
               </div>
 
               <div className="info-item">
@@ -267,7 +395,14 @@ ${responseData.transcript}
 
               <div className="info-item">
                 <span className="label">Audio File</span>
-                <span className="value break-text">{responseData.audio_file}</span>
+                <span className="value break-text">
+                  {responseData.audio_file}
+                </span>
+              </div>
+
+              <div className="info-item">
+                <span className="label">Mode</span>
+                <span className="value">{responseData.ai_mode}</span>
               </div>
             </div>
 
@@ -310,7 +445,7 @@ ${responseData.transcript}
               <h3>Important Notes</h3>
               <div className="section-box">
                 <ul>
-                  {responseData.important_points.map((point, index) => (
+                  {(responseData.important_points || []).map((point, index) => (
                     <li key={index}>{point}</li>
                   ))}
                 </ul>
@@ -320,11 +455,65 @@ ${responseData.transcript}
             <div className="section">
               <h3>Keywords</h3>
               <div className="section-box keywords">
-                {responseData.keywords.map((word, index) => (
+                {(responseData.keywords || []).map((word, index) => (
                   <span className="keyword-tag" key={index}>
                     {word}
                   </span>
                 ))}
+              </div>
+            </div>
+
+            <div className="section">
+              <h3>Automatic Q&amp;A</h3>
+              <div className="section-box">
+                {(responseData.auto_qa || []).length > 0 ? (
+                  responseData.auto_qa.map((item, index) => (
+                    <div className="qa-item" key={index}>
+                      <p>
+                        <strong>Q:</strong> {item.question}
+                      </p>
+                      <p>
+                        <strong>A:</strong> {item.answer}
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <p>No automatic Q&amp;A generated.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="section">
+              <h3>Ask Your Own Question</h3>
+              <div className="section-box">
+                <input
+                  type="text"
+                  placeholder="Ask anything from the video transcript..."
+                  value={question}
+                  onChange={(e) => setQuestion(e.target.value)}
+                />
+
+                <button
+                  type="button"
+                  className="ask-btn"
+                  onClick={handleAsk}
+                  disabled={askLoading}
+                >
+                  {askLoading ? "Getting Answer..." : "Ask Question"}
+                </button>
+
+                {askError && <p className="error small-error">{askError}</p>}
+
+                {answer && (
+                  <div className="answer-box">
+                    <p><strong>Answer:</strong> {answer}</p>
+                    <p><strong>Source:</strong> {answerSource}</p>
+                    <p>
+                      <strong>Found in Transcript:</strong>{" "}
+                      {answerInTranscript ? "Yes" : "No"}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 
